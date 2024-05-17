@@ -696,6 +696,36 @@ func (p *Pipe) MatchRegexp(re *regexp.Regexp) *Pipe {
 	})
 }
 
+// MatchFunc produces only the input lines that the match function returns true for.
+func (p *Pipe) MatchFunc(match func(string) (bool, error)) *Pipe {
+	return p.Filter(func(r io.Reader, w io.Writer) error {
+		scanner := newScanner(r)
+		for scanner.Scan() {
+			line := scanner.Text()
+			ok, err := match(line)
+			if err != nil {
+				return err
+			}
+			if ok {
+				fmt.Fprintln(w, line)
+			}
+		}
+		return scanner.Err()
+	})
+}
+
+// MatchFile produces only the input file names that the match function returns true for.
+func (p *Pipe) MatchFile(match func(*os.File) (bool, error)) *Pipe {
+	return p.MatchFunc(func(name string) (bool, error) {
+		file, err := os.Open(name)
+		if err != nil {
+			return false, err
+		}
+		defer file.Close()
+		return match(file)
+	})
+}
+
 // Post makes an HTTP POST request to url, using the contents of the pipe as
 // the request body, and produces the server's response. See [Pipe.Do] for how
 // the HTTP response status is interpreted.

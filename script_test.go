@@ -3,6 +3,7 @@ package script_test
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -950,6 +951,30 @@ func TestMatchRegexp_OutputsOnlyLinesMatchingRegexp(t *testing.T) {
 		if tc.want != got {
 			t.Error(cmp.Diff(tc.want, got))
 		}
+	}
+}
+
+func TestMatchFuncError(t *testing.T) {
+	n, err := script.Echo("hello\nworld\n").MatchFunc(func(line string) (bool, error) {
+		return false, errors.New("boom")
+	}).Stdout()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if n != 0 {
+		t.Fatal("expected no output")
+	}
+}
+
+func TestMatchFileError(t *testing.T) {
+	n, err := script.FindFiles("testdata").MatchFile(func(file *os.File) (bool, error) {
+		return false, errors.New("boom")
+	}).Stdout()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if n != 0 {
+		t.Fatal("expected no output")
 	}
 }
 
@@ -2134,6 +2159,40 @@ func ExamplePipe_MatchRegexp() {
 	script.Echo("hello\nworld\n").MatchRegexp(re).Stdout()
 	// Output:
 	// world
+}
+
+func ExamplePipe_MatchFunc() {
+	script.Echo("hello\nracecar\n").MatchFunc(isPalindrome).Stdout()
+	// Output:
+	// racecar
+}
+
+func isPalindrome(line string) (bool, error) {
+	for i := 0; i < len(line)/2; i++ {
+		if line[i] != line[len(line)-1-i] {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func ExamplePipe_MatchFile() {
+	script.FindFiles("testdata").MatchFile(isValidJSON).Stdout()
+	// Output:
+	// testdata/commits.json
+	// testdata/releases.json
+}
+
+func isValidJSON(file *os.File) (bool, error) {
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return false, err
+	}
+	var dst any
+	if err := json.Unmarshal(data, &dst); err != nil {
+		return false, nil
+	}
+	return true, nil
 }
 
 func ExamplePipe_Post() {
